@@ -45,7 +45,7 @@ class CrackRandom:
         self.logger = self._setLog(loglevel)
         self.logger.debug("Init done.")
     
-    def _setLog(self, loglevel:str="DEBUG"):
+    def _setLog(self, loglevel:str):
         logger = logging.getLogger("CrackRandom")
         logger.setLevel(loglevel)
         handler = logging.StreamHandler()
