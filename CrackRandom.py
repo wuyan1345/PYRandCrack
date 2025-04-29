@@ -59,9 +59,6 @@ class CrackRandom:
         if self.totalbitsize < 19968:
             self.logger.info(f"The bits is not enough to crack MT19937. Now got {self.totalbitsize} bits.")
             return False
-        elif self.totalbitsize > 19968:
-            self.logger.info(f"This part needs to be updated. The bits is too much. Now got {self.totalbitsize} bits.")
-            return False
         return True
     
     def _constructRow(self, RNG:Random) -> list:
@@ -98,15 +95,11 @@ class CrackRandom:
         if bitvalue >= (1<<bitsize):
             self.logger.error(f"Your bitvalue is greater than the max number of your bitsize.")
             return
-        if self.totalbitsize <= 19968:
-            self.bits.append([bitsize, bitvalue, known])
-            if known:
-                self.totalbitsize += bitsize
-                self.R += [int(i) for i in bin(bitvalue)[2:].zfill(bitsize)]
-            if known:
-                self.logger.debug(f"Already got {self.totalbitsize} bits.")
-        else:
-            self.logger.info(f"This part needs to be updated. The bits are too much. Now got {self.totalbitsize} bits.")
+        self.bits.append([bitsize, bitvalue, known])
+        if known:
+            self.totalbitsize += bitsize
+            self.R += [int(i) for i in bin(bitvalue)[2:].zfill(bitsize)]
+            self.logger.debug(f"Already got {self.totalbitsize} bits.")
 
     def randomPredict(self) -> Random:
         """
@@ -114,6 +107,7 @@ class CrackRandom:
         """
         if self._checkSufficient():
             self.logger.info("Start constructing the matrix. It will take a few minutes.")
+            # divide into two parts to avoid storing too much data in memory. (Will be killed in 8GB memory if not to do so)
             for i in range(19968):        # You can use tqdm.trange() to see the exact time.
                 state = [0]*624
                 temp = "0"*i + "1"*1 + "0"*(19968-1-i)
@@ -122,9 +116,18 @@ class CrackRandom:
                 RNG = Random()
                 RNG.setstate((3,tuple(state+[624]),None))
                 self.L.append(self._constructRow(RNG))
-            L = Matrix(GF(2), self.L)
+                if i==9983:
+                    L1 = Matrix(GF(2), self.L)
+                    self.L.clear()
+                    self.logger.info("Half done.")
+            L2 = Matrix(GF(2), self.L)
+            L = L1.stack(L2)
             R = vector(GF(2), self.R)
             self.logger.info("Matrix init done.")
+            matrix_rank = L.rank()
+            self.logger.debug(f"Matrix rank is {matrix_rank}.")
+            if matrix_rank < 19937:
+                self.logger.warning("Maybe there will be multiple solutions and fail to predict. Try to add more bits.")
             self.logger.info("Start solving...")
             try:
                 s = L.solve_left(R)
@@ -146,17 +149,33 @@ class CrackRandom:
         
     
 if __name__ == "__main__":
-    # crack = CrackRandom()
-    # for i in range(19968//8):
-    #     crack.uploadValues(8,getrandbits(8))
-    # RNG = crack.randomPredict()
-    crack = CrackRandom("DEBUG")
-    bitlenths = [1,44,63,22]*(19968//64)
-    assert 19968==sum(bitlenths[::2])
-    for i in range(len(bitlenths)):
-        if i%2==0:
-            crack.uploadValues(bitlenths[i],getrandbits(bitlenths[i]),True)
-        else:
-            getrandbits(bitlenths[i])   #left unknown
-            crack.uploadValues(bitlenths[i],0,False)
+    crack = CrackRandom()
+    length = 8
+    times = 19968//length
+    for i in range(times):
+        crack.uploadValues(length,getrandbits(length))
     RNG = crack.randomPredict()
+    for i in range(times):
+        RNG.getrandbits(length)
+    print(RNG.getrandbits(length),getrandbits(length))
+
+    # crack = CrackRandom("DEBUG")
+    # bitlenths = [1,44,63,22]*(19968//64)
+    # assert 19968==sum(bitlenths[::2])
+    # for i in range(len(bitlenths)):
+    #     if i%2==0:
+    #         crack.uploadValues(bitlenths[i],getrandbits(bitlenths[i]),True)
+    #     else:
+    #         getrandbits(bitlenths[i])   #left unknown
+    #         crack.uploadValues(bitlenths[i],0,False)
+    # RNG = crack.randomPredict()
+
+    # crack = CrackRandom()
+    # length = 12
+    # times = 19968//length+500   # need more to make sure the matrix's rank is 19937
+    # for i in range(times):
+    #     crack.uploadValues(length,getrandbits(length))
+    # RNG = crack.randomPredict()
+    # for i in range(times):
+    #     RNG.getrandbits(length)
+    # print(RNG.getrandbits(length),getrandbits(length))
