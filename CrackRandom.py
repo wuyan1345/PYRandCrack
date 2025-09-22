@@ -1,3 +1,4 @@
+from sympy import GF
 from sage.all import *
 import logging
 from colorama import Fore, Style, init
@@ -160,7 +161,12 @@ class CrackRandom:
         self._checkSufficient()
         self.logger.info("Start solving...")
         try:
-            s = self.L.solve_left(R)
+            try:
+                NR = R + vector(GF(2), self.L[0])
+                S = self.L[1:].solve_left(NR)
+                s = vector(GF(2), [1]+list(S))
+            except:
+                s = self.L.solve_left(R)
         except:
             self.logger.error("Can't find the solution. Check your data.")
             return None
